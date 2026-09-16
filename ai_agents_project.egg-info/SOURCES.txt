@@ -11,3 +11,4 @@ project/models.py
 project/prices.py
 project/trace.py
 project/verify.py
+tests/test_spine.py
