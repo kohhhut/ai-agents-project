@@ -38,11 +38,20 @@ LIVE_CELLS = {
                  "administration. Be concise.",
 }
 LIVE_RUNS = 6
+ALL_CELLS = {
+    **LIVE_CELLS,
+    "open_short": "In one sentence, why is Luxembourg City important to the "
+                  "European Union?",
+    "open_reasoning": "A resident asks whether they need a parking vignette "
+                      "if they park in a visitor bay. Explain what information "
+                      "you would need before answering, and why.",
+}
 
 
 # --------------------------------------------------------------------------
 
 def count_distinct(texts: list[str]) -> int:
+    return len(set(texts))
     """TODO 4. How many genuinely different answers are in this list?
 
     Start with exact string equality, which is what a naive unit test would
@@ -54,7 +63,6 @@ def count_distinct(texts: list[str]) -> int:
     noticing that you cannot is the point. Week 10 spends the whole session
     on it.
     """
-    raise NotImplementedError("TODO 4: count the distinct strings")
 
 
 def summarize(cell_name: str, texts: list[str], latencies: list[float]) -> dict:
@@ -89,11 +97,13 @@ def from_replay(full: bool) -> list[dict]:
 def from_live(full: bool) -> list[dict]:
     from openai import OpenAI
     client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
+    cells = ALL_CELLS if full else LIVE_CELLS
+    runs = 12 if full else LIVE_RUNS
     rows = []
-    for pname, prompt in LIVE_CELLS.items():
+    for pname, prompt in cells.items():
         for tname, temp in (("t00", 0.0), ("t10", 1.0)):
             texts, lats = [], []
-            for _ in range(LIVE_RUNS):
+            for _ in range(runs):
                 t0 = time.perf_counter()
                 reply = client.chat.completions.create(
                     model=SMALL.name, temperature=temp, max_tokens=200,

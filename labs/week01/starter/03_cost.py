@@ -74,6 +74,14 @@ def main() -> int:
     #   Then answer, in DECISIONS.md: your system will call two different
     #   models. What does this measurement tell you about switching between
     #   them inside one request, and what would you do instead?
+    # TODO 7. Measure the cold start
+    subprocess.run(["ollama", "stop", SMALL.name])
+
+    cold_reply, cold_s = timed(client, SHORT, SMALL.name)
+    warm_reply, warm_s = timed(client, SHORT, SMALL.name)
+
+    print(f"Cold start: {cold_s:.2f}")
+    print(f"Warm start: {warm_s:.2f}")
 
     # TODO 8. Estimate what a real evaluation run would cost hosted.
     #
@@ -91,11 +99,32 @@ def main() -> int:
     #   Label them as estimates. They are not measurements and the price
     #   list is dated {PRICE_DATE}.
 
+    # TODO 8. Estimate hosted evaluation costs
+    print("\n--- Estimated Hosted Costs ---\n")
+
+    # Use the long prompt's token counts as the typical case
+    long_row = rows[1]  # the "long" case
+    tokens_in = long_row["prompt_tokens"]
+    tokens_out = long_row["completion_tokens"]
+
+    # 200 cases per night, nightly for 14 weeks = 98 nights
+    cases_per_night = 200
+    nights = 14 * 7
+
+    # estimate() takes the tokens of ONE call and reports the price
+    # per thousand calls, so pass the per-case tokens, not the totals.
+    small_cost = estimate(tokens_in, tokens_out, tier="small")
+    large_cost = estimate(tokens_in, tokens_out, tier="large")
+
+    print(f"Per case: {tokens_in} in, {tokens_out} out tokens")
+    print(f"  Small tier: {small_cost.summary()}")
+    print(f"  Large tier: {large_cost.summary()}")
+    print(f"One run = {cases_per_night} calls, "
+          f"semester = {cases_per_night * nights} calls")
     write_json("artifacts/week01_cost.json",
                {"rows": rows, "price_list_date": PRICE_DATE})
     print(local_cost_note())
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

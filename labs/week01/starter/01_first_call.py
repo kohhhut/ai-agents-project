@@ -43,7 +43,12 @@ def main() -> int:
         #     temperature=0.0
         #     max_tokens=200
         #   Assign the result to `reply`.
-        reply = None
+        reply = client.chat.completions.create(
+            model=SMALL.name,
+            messages=[{"role": "user", "content": QUESTION}],
+            temperature=0.0,
+            max_tokens=200,
+        )
 
         elapsed = time.perf_counter() - started
 
@@ -68,7 +73,18 @@ def main() -> int:
     #   d. the elapsed time           `elapsed`, computed above
     #      Which part of it would a user actually feel?
     #
-    print("\n--- TODO 2: print the four things here ---\n")
+    print("\n--- Answer ---\n")
+    print(reply.choices[0].message.content)
+
+    print("\n--- Finish reason ---\n")
+    print(reply.choices[0].finish_reason)
+
+    print("\n--- Token counts ---\n")
+    print(reply.usage.prompt_tokens)
+    print(reply.usage.completion_tokens)
+
+    print("\n--- Elapsed time ---\n")
+    print(elapsed)    
 
     # TODO 3. Close the trace.
     #   Call rec.finish(...) with:
@@ -81,6 +97,7 @@ def main() -> int:
     #   It should report one record in traces.jsonl. From week 4 onward
     #   every run your system makes lands in that file, and week 10 builds
     #   the evaluation harness on it.
+    rec.finish(output=reply.choices[0].message.content, outcome="ok")
 
     # A free number, so that cost is visible from day one. Local calls cost
     # nothing, which is convenient and also a distortion, so the course keeps
