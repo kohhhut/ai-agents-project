@@ -71,40 +71,20 @@ def score_one(record, gold, document_text: str) -> dict[str, FieldResult]:
 
     Return a dict keyed by field name.
     """
-    results: dict[str, FieldResult] = {}
+    # Equality is enough for due_date: "" and "null" are not None, and a
+    # well-formed but wrong date does not equal the gold date either.
+    return {
+        "category": FieldResult(
+            record.category == gold.category, record.category, gold.category),
+        "urgency": FieldResult(
+            record.urgency == gold.urgency, record.urgency, gold.urgency),
+        "due_date": FieldResult(
+            record.due_date == gold.due_date, record.due_date, gold.due_date),
+        "quote": FieldResult(
+            record.quote in document_text, record.quote,
+            "verbatim span in source"),
+    }
 
-    # category and urgency: closed label sets, equality is the whole test.
-    for name in ("category", "urgency"):
-        got, exp = getattr(record, name), getattr(gold, name)
-        results[name] = FieldResult(
-            got == exp, got, exp,
-            "" if got == exp else f"got {got!r}, expected {exp!r}")
-
-    # due_date: the only correct "no date" is None. "" and "null" as strings
-    # are the wrong shape; a well formed but wrong date is a different kind
-    # of wrong, an invented one. Both count as wrong, with different notes.
-    got, exp = record.due_date, gold.due_date
-    if got == exp:
-        note = ""
-    elif exp is None and got in ("", "null", "none", "None", "N/A"):
-        note = f"wrong shape for no date: {got!r}, expected None"
-    elif exp is None:
-        note = f"invented a date: {got!r}, expected None"
-    elif got is None:
-        note = f"missed the date, expected {exp!r}"
-    else:
-        note = f"wrong date {got!r}, expected {exp!r}"
-    results["due_date"] = FieldResult(got == exp, got, exp, note)
-
-    # quote: exact substring, nothing relaxed. An empty string is a
-    # substring of everything, so it has to be rejected explicitly.
-    q = record.quote
-    ok = bool(q) and q in document_text
-    note = "" if ok else ("empty quote" if not q
-                          else f"not verbatim: {q[:60]!r}")
-    results["quote"] = FieldResult(ok, q, "(verbatim span)", note)
-
-    return results
 
 # --------------------------------------------------------------------------
 # TODO 4. Aggregate.
@@ -125,20 +105,24 @@ def score_all(records, golds, docs) -> Scoreboard:
     was.
     """
     board = Scoreboard()
-    for record, doc in zip(records, docs):
+    for doc, record in zip(docs, records):
         board.total += 1
+        gold = golds[doc.id]
         if record is None:
-            # Invalid output: every field counts as wrong for this document.
             board.invalid += 1
-            board.failures.append(
-                (doc.id, "all", "invalid output, could not be parsed"))
+            for name in FIELDS:
+                board.failures.append(
+                    (doc.id, name, "validation failed; counted wrong"))
             continue
-        for name, res in score_one(record, golds[doc.id], doc.text).items():
-            if res.correct:
+        results = score_one(record, gold, doc.text)
+        for name, result in results.items():
+            if result.correct:
                 board.hits[name] += 1
             else:
-                board.failures.append((doc.id, name, res.note))
+                board.failures.append(
+                    (doc.id, name, f"got {result.got!r}, expected {result.expected!r}"))
     return board
+
 
 # --------------------------------------------------------------------------
 # Given.

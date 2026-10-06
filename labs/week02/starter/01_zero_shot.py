@@ -24,7 +24,8 @@ from extractor import (PROMPT_VERSION, SYSTEM_ZERO_SHOT, get_client,
                        run_variant)
 
 from project.trace import write_json
-
+from dataclasses import asdict
+from project.contracts import GoldCase, GoldSet
 
 def main() -> int:
     ap = argparse.ArgumentParser()
@@ -48,29 +49,53 @@ def main() -> int:
 
     # TODO 7. Write the gold set into the project spine.
     #
-    #   Build a GoldSet out of the ten documents and their annotations and
-    #   write it to artifacts/goldset.json with
-    #   project.trace.write_json(...).
-    #
-    #   For each document, one GoldCase with:
-    #     case_id           the document id
-    #     week_added        2
-    #     question          the document text
-    #     expected          the gold annotation, as a dict
-    #     expected_behavior one sentence a colleague could grade against.
-    #                       "extracts category access and urgency standard,
-    #                       with no due date because the message only says
-    #                       'before the end of the month'" is a good one.
-    #                       "works" is not.
-    #     slice_tags        at least the language, so week 10 can report per
-    #                       language instead of as one average
-    #
-    #   This is not busywork and it is not for today. Week 3 adds route
-    #   labels to this file, week 7 adds retrieval questions, and week 10
-    #   builds the evaluation harness on whatever is in it by then. Ten
-    #   careful cases now is the cheapest week 10 you will ever have.
-    #
-    #   Then run: python -m project.verify
+    BEHAVIOR = {
+        "REQ-01": "Extracts category access and urgency urgent, with no due date "
+                  "because the message only says 'tomorrow' and 'today', which "
+                  "are relative expressions, and quotes a span copied verbatim "
+                  "from the message that supports the urgency.",
+        "REQ-02": "Extracts category hardware and urgency standard, with due date "
+                  "2026-09-15, because 15/09/2026 is a European DD/MM/YYYY date.",
+        "REQ-03": "Extracts category billing and urgency standard, with no due "
+                  "date, because the message says it is not urgent and gives no "
+                  "date.",
+        "REQ-04": "Extracts category facilities and urgency urgent, with no due "
+                  "date, because the open entrance door needs someone "
+                  "'immediately', which is not a calendar date.",
+        "REQ-05": "Extracts category access and urgency standard, with no due "
+                  "date, because the message says 'not urgent' and only "
+                  "'before the end of the month', which is a relative "
+                  "expression.",
+        "REQ-06": "Extracts category billing and urgency info, with no due date, "
+                  "because the message only informs the help desk and says no "
+                  "action is needed.",
+        "REQ-07": "Extracts category facilities and urgency standard, with due "
+                  "date 2026-10-01, because '1. Oktober 2026' is a written "
+                  "German calendar date.",
+        "REQ-08": "Extracts category hardware and urgency urgent, with no due "
+                  "date, because the file server is down and blocking the "
+                  "whole team today, with no calendar date given.",
+        "REQ-09": "Extracts category other and urgency info, with no due date, "
+                  "because the message is only a suggestion and says it is not "
+                  "a problem.",
+        "REQ-10": "Extracts category access and urgency standard, with no due "
+                  "date, because 'before the end of the month' is a relative "
+                  "expression.",
+    }
+
+    cases = [
+        GoldCase(
+            case_id=doc.id,
+            week_added=2,
+            question=doc.text,
+            expected=asdict(GOLD[doc.id]),
+            expected_behavior=BEHAVIOR[doc.id],
+            slice_tags=[doc.lang],
+        )
+        for doc in DOCS
+    ]
+    gold = GoldSet(cases=cases)
+    write_json("artifacts/goldset.json", gold.model_dump(mode="json"))
 
     return 0
 

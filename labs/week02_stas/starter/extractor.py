@@ -49,59 +49,56 @@ class ServiceRequest(BaseModel):
     category: Literal["access", "hardware", "billing", "facilities", "other"]
     urgency: Literal["urgent", "standard", "info"]
 
+    
     # TODO 1a: due_date. Give it a type that can hold a date or nothing,
     #          and a Field(description=...) stating the convention. The
     #          description is sent to the model, so it is prompt engineering
     #          rather than documentation.
     # TODO 1b: quote. A string, with a description that says "verbatim" in
     #          words a model will act on. Consider a max_length.
+
     due_date: str | None = Field(
-        description=(
-            "The due date as ISO 8601 (YYYY-MM-DD) if the message states a "
-            "calendar date, in any format or language. A date written as "
-            "DD/MM/YYYY is European: day first. Use null if the message "
-            "states no date, or only a relative expression such as 'as soon "
-            "as possible', 'today', 'tomorrow', 'next week' or 'before the "
-            "end of the month'. Never invent a date."))
+        default=None,
+        description="ISO 8601 date, YYYY-MM-DD, when the message states a "
+                    "calendar date in any format or language. Dates written "
+                    "DD/MM/YYYY are European. Use null when the message "
+                    "states no date, or only a relative expression such as "
+                    "'as soon as possible' or 'before the end of the month'.",
+    )
     quote: str = Field(
         max_length=200,
-        description=(
-            "A span copied verbatim, character for character, from the "
-            "message, that supports the urgency decision. Do not translate, "
-            "shorten with ellipses, or rephrase it."))
+        description="A span copied from the message exactly, character for "
+                    "character, that supports the urgency decision. Do not "
+                    "translate it, do not shorten it, and do not tidy the "
+                    "punctuation. It must appear in the message as written.",
+    )
+
 
 # --------------------------------------------------------------------------
 # TODO 2. Build the messages.
 # --------------------------------------------------------------------------
 
 SYSTEM_ZERO_SHOT = """\
-You extract a structured record from one message sent to the help desk of a
-municipal administration. Messages arrive in English, French, or German.
+You extract one structured record from a message sent to the help desk of a Luxembourg commune. Messages arrive in English, French, or German. Keep the same record shape in every language.
 
-Return four fields.
+category, exactly one of:
+  access      accounts, passwords, permissions, shared mailboxes, portal login
+  hardware    a physical device or a server that is broken or missing
+  billing     an invoice, a charge, a payment, or a supplier reference
+  facilities  the building itself: doors, heating, windows, lifts
+  other       anything that fits none of the above, including suggestions
 
-category, one of:
-  access      accounts, passwords, permissions, badges, shared mailboxes
-  hardware    computers, printers, servers and other equipment
-  billing     invoices and payments
-  facilities  the building: doors, heating, windows, lifts, rooms
-  other       anything that fits none of the above
+urgency, exactly one of:
+  urgent      someone is blocked now, or there is a safety or security risk
+  standard    it needs doing, and a normal turnaround is acceptable
+  info        no action is being requested
 
-urgency, one of:
-  urgent      needs action immediately, or is a safety or security problem,
-              or is blocking work right now
-  standard    needs action, but nothing is blocked right now
-  info        no action is needed, or it is only a suggestion or a notice
+due_date:
+  YYYY-MM-DD when the message states a calendar date. Dates written DD/MM/YYYY are European: 15/09/2026 is 2026-09-15. A month name in French or German is a stated date.
+  null when the message states no date, or only a relative expression such as "as soon as possible", "before the end of the month", or "today". Do not invent a calendar date from a relative expression.
 
-due_date: an ISO date (YYYY-MM-DD) only if the message states a calendar
-date, in any format or language. Dates written as DD/MM/YYYY are European,
-day first. If the message states no date, or only a relative expression such
-as "as soon as possible", "today", "tomorrow" or "before the end of the
-month", the value is null. Never invent a date.
-
-quote: one span copied character for character from the message that
-supports your urgency decision. Do not translate it, tidy it, or paraphrase
-it.
+quote:
+  Copy a span from the message, character for character, that supports the urgency decision. Do not translate it, paraphrase it, or shorten it.
 """
 
 
@@ -121,6 +118,7 @@ def build_messages(system: str, document_text: str) -> list[dict]:
         {"role": "system", "content": system},
         {"role": "user", "content": document_text},
     ]
+
 
 # --------------------------------------------------------------------------
 # Given. The call, the validation, and the timing.

@@ -34,35 +34,7 @@ from project.trace import write_json
 # TODO 5. Choose your examples and build the block.
 # --------------------------------------------------------------------------
 
-# Why these three examples (all from EXAMPLE_POOL):
-#
-#   EX-06 (en): the boundary between facilities and hardware. The message
-#       names a printer, but the real problem is a window that will not
-#       close, so the label is facilities, not hardware. Meant to move:
-#       category (and urgency, "getting worse by the hour" is urgent).
-#
-#   EX-04 (en): a message with no stated deadline, which demonstrates the null
-#       convention. "next week" is a relative expression, not a calendar
-#       date, so due_date is null. It is also the only example of the info
-#       label. Meant to move: due_date (null) and urgency (info).
-#
-#   EX-05 (fr): a language other than English, and a stated calendar date
-#       written in words, "30 septembre 2026", which must become 2026-09-30.
-#       It shows the date convention in a non-English message. Meant to move:
-#       due_date.
-#
-# The quotes below are exact sentences copied from the messages, because the
-# model imitates whatever it sees in `quote`.
-EXAMPLE_IDS = ["EX-06", "EX-04", "EX-05"]
-
-QUOTES = {
-    "EX-06": "This is getting worse by the hour.",
-    "EX-04": "For information only: the new intranet search will be switched on next week.",
-    "EX-05": "Merci de verifier avant le paiement du 30 septembre 2026.",
-}
-
-
-def few_shot_block(n: int = 3) -> str:
+def few_shot_block(n: int = 4) -> str:
     """Return the example block that gets appended to the system prompt.
 
     Choose from EXAMPLE_POOL, never from DOCS. Three to five examples. Fewer
@@ -89,21 +61,33 @@ def few_shot_block(n: int = 3) -> str:
     stop copying verbatim, and the field that scored perfectly zero-shot
     will get worse. Look at the recording if you want to see that happen.
     """
-    pool = {doc.id: (doc, gold) for doc, gold in EXAMPLE_POOL}
-    parts = ["Examples:"]
-    for ex_id in EXAMPLE_IDS[:n]:
-        doc, gold = pool[ex_id]
-        quote = QUOTES[ex_id]
-        assert quote in doc.text, f"{ex_id}: quote is not verbatim"
-        answer = {
+    # Four held-out examples. Each one is meant to move one field.
+    # EX-02: facilities, not hardware; "immediate" is not a date. French.
+    # EX-04: "next week" is not a date; urgency info.
+    # EX-05: a written month name is a real date. French.
+    # EX-01: no calendar date, and not urgent because the person is not blocked.
+    chosen = {
+        "EX-02": "L'ascenseur du batiment administratif est bloque entre le rez et le premier avec une personne a l'interieur.",
+        "EX-04": "For information only: the new intranet search will be switched on next week.",
+        "EX-05": "Nous avons recu deux fois la meme facture pour l'entretien des espaces verts, reference 2026-0417.",
+        "EX-01": "The badge reader at the side entrance rejects my card since the system update.",
+    }
+    by_id = {doc.id: (doc, gold) for doc, gold in EXAMPLE_POOL}
+    lines = ["Examples. Follow these exactly, including the quote style."]
+    for ex_id, quote in list(chosen.items())[:n]:
+        doc, gold = by_id[ex_id]
+        if quote not in doc.text:
+            raise ValueError(f"{ex_id} quote is not verbatim")
+        record = {
             "category": gold.category,
             "urgency": gold.urgency,
             "due_date": gold.due_date,
             "quote": quote,
         }
-        parts.append(f"Message: {doc.text}\n"
-                     f"Answer: {json.dumps(answer, ensure_ascii=False)}")
-    return "\n\n".join(parts)
+        lines.append(f"\nMessage: {doc.text}")
+        lines.append("Record: " + json.dumps(record, ensure_ascii=False))
+    return "\n".join(lines)
+
 
 SYSTEM_FEW_SHOT = SYSTEM_ZERO_SHOT + "\n"   # + few_shot_block(), once written
 
@@ -122,11 +106,6 @@ def main() -> int:
         DOCS, GOLD)
 
     print(compare(zero_board, few_board, "zero-shot", "few-shot"))
-
-    for name, board in (("zero-shot", zero_board), ("few-shot", few_board)):
-        print(f"\n{name} failures:")
-        for doc_id, fieldname, note in board.failures:
-            print(f"  {doc_id}  {fieldname:<9} {note}")
 
     zero_tok = sum(m["prompt_tokens"] for m in zero_metas)
     few_tok = sum(m["prompt_tokens"] for m in few_metas)
@@ -159,7 +138,6 @@ def main() -> int:
     #      cost per thousand calls, and one sentence saying what would change
     #      your mind. "It scored higher" is not sufficient on ten records,
     #      and saying so is worth more marks than claiming a win.
-    
 
     return 0
 

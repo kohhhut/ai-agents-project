@@ -17,15 +17,15 @@ One TODO marker.
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import json
+from pathlib import Path
 
-from documents import DOCS, GOLD
+from documents import DOCS, EXAMPLE_POOL, GOLD
 from extractor import SYSTEM_ZERO_SHOT, get_client, run_variant
 from scoring import compare
 
 from project.trace import write_json
-
-import importlib.util
-from pathlib import Path
 
 VARIANTS = ("baseline", "role", "reordered", "no_delimiter", "english_only")
 
@@ -65,17 +65,67 @@ def build_system(variant: str) -> str:
                    needed to attribute it. Week 13 asks who a system works
                    for, and this is what it costs to answer with evidence.
     """
-    path = Path(__file__).with_name("02_few_shot.py")
-    spec = importlib.util.spec_from_file_location("few_shot_module", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    baseline = SYSTEM_ZERO_SHOT + "\n" + module.few_shot_block()
+    baseline = SYSTEM_ZERO_SHOT + "\n" + _few_shot_block()
     if variant == "baseline":
         return baseline
     if variant == "role":
         return "You are a senior service desk analyst.\n" + baseline
-    raise NotImplementedError(f"variant {variant!r} is not built yet")
+    if variant == "reordered":
+        return _with_block(list(reversed(_CHOSEN)), labeled=True)
+    if variant == "no_delimiter":
+        return _with_block(_CHOSEN, labeled=False)
+    if variant == "english_only":
+        # EXAMPLE_POOL has three English messages. The fourth slot repeats
+        # EX-01 so the block stays the same length as the baseline.
+        return _with_block(_ENGLISH, labeled=True)
+    raise ValueError(f"unknown variant {variant!r}")
+
+
+# Same four examples, same verbatim quotes, as few_shot_block.
+_CHOSEN = [
+    ("EX-02", "L'ascenseur du batiment administratif est bloque entre le rez et le premier avec une personne a l'interieur."),
+    ("EX-04", "For information only: the new intranet search will be switched on next week."),
+    ("EX-05", "Nous avons recu deux fois la meme facture pour l'entretien des espaces verts, reference 2026-0417."),
+    ("EX-01", "The badge reader at the side entrance rejects my card since the system update."),
+]
+
+_ENGLISH = [
+    ("EX-01", "The badge reader at the side entrance rejects my card since the system update."),
+    ("EX-04", "For information only: the new intranet search will be switched on next week."),
+    ("EX-06", "The window in office 2.14 will not close and rain is coming in onto the shared printer below it."),
+    ("EX-01", "The badge reader at the side entrance rejects my card since the system update."),
+]
+
+
+def _few_shot_block() -> str:
+    path = Path(__file__).with_name("02_few_shot.py")
+    spec = importlib.util.spec_from_file_location("week02_few_shot", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.few_shot_block()
+
+
+def _with_block(items: list[tuple[str, str]], labeled: bool) -> str:
+    by_id = {doc.id: (doc, gold) for doc, gold in EXAMPLE_POOL}
+    lines = ["Examples. Follow these exactly, including the quote style."]
+    for ex_id, quote in items:
+        doc, gold = by_id[ex_id]
+        if quote not in doc.text:
+            raise ValueError(f"{ex_id} quote is not verbatim")
+        record = json.dumps({
+            "category": gold.category,
+            "urgency": gold.urgency,
+            "due_date": gold.due_date,
+            "quote": quote,
+        }, ensure_ascii=False)
+        if labeled:
+            lines.append(f"\nMessage: {doc.text}")
+            lines.append("Record: " + record)
+        else:
+            lines.append(f"\n{doc.text}")
+            lines.append(record)
+    return SYSTEM_ZERO_SHOT + "\n" + "\n".join(lines)
+
 
 def main() -> int:
     ap = argparse.ArgumentParser()
